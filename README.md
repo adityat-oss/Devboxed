@@ -25,6 +25,8 @@ cd Sandboxed
 ./install.sh
 ```
 
+*(**Security Note:** `install.sh` does not download any external dependencies, daemonize any processes, or modify your system state. It simply creates two symbolic links in `/usr/local/bin/` pointing to the scripts, and generates a default JSON configuration file in your home directory.)*
+
 **What to expect if it worked:**
 - You will see a success message indicating that `devbox` and `sandbox` have been linked to `/usr/local/bin`.
 - A default configuration file will be generated at `~/.sandboxed_config.json`.
