@@ -1,6 +1,6 @@
-# Sandboxed: The Zero-Overhead Cyber-Jail
+# Devboxed
 
-**Sandboxed** is a native, zero-dependency, macOS kernel-level isolation tool. 
+**Devboxed** is a native, zero-dependency, macOS kernel-level isolation tool. 
 
 It allows you to safely execute untrusted scripts, run malware analysis, or create completely disposable local development workspaces—without the heavy overhead of Docker or virtual machines. It is powered directly by the macOS Seatbelt (`sandbox-exec`) kernel API and instantaneous APFS filesystem clones.
 
