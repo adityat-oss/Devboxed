@@ -59,6 +59,25 @@ def main():
         print(f"{C.RED}{C.BOLD}Error: {target_abs} does not exist.{C.RESET}")
         sys.exit(1)
 
+    # SAFETY GUARD: Prevent cloning massive directories (like entire home folders)
+    if os.path.isdir(target_abs):
+        print(f"{C.MAGENTA}[*] Verifying target size...{C.RESET}")
+        file_count = 0
+        MAX_FILES = 10000
+        for root, dirs, files in os.walk(target_abs):
+            file_count += len(files)
+            if file_count > MAX_FILES:
+                break
+                
+        if file_count > MAX_FILES:
+            print(f"\n{C.RED}{C.BOLD}[!] WARNING: MASSIVE DIRECTORY DETECTED{C.RESET}")
+            print(f"{C.ORANGE}The target path ({target_abs}) contains over {MAX_FILES} files.{C.RESET}")
+            print(f"{C.ORANGE}Cloning folders like ~/Downloads or ~/Desktop could cause significant system slowdown.{C.RESET}")
+            choice = input(f"{C.BOLD}Are you absolutely sure you want to sandbox this entire path? (y/N): {C.RESET}")
+            if choice.lower() != 'y':
+                print(f"{C.MAGENTA}Aborted by user.{C.RESET}")
+                sys.exit(1)
+
     jail = VirtualJail()
     mem_limit = 512
     net_enabled = True

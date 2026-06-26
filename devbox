@@ -31,9 +31,27 @@ def main():
         target_abs = os.path.abspath(sys.argv[1])
         
     if not os.path.exists(target_abs) or not os.path.isdir(target_abs):
-        print(f"{C.RED}{C.BOLD}Error: {target_abs} is not a valid directory.{C.RESET}")
+        print(f"{C.RED}[!] Error: Target must be a directory for devbox.{C.RESET}")
         sys.exit(1)
-
+        
+    # SAFETY GUARD: Prevent cloning massive directories (like entire home folders)
+    print(f"{C.MAGENTA}[*] Verifying target size...{C.RESET}")
+    file_count = 0
+    MAX_FILES = 10000
+    for root, dirs, files in os.walk(target_abs):
+        file_count += len(files)
+        if file_count > MAX_FILES:
+            break
+            
+    if file_count > MAX_FILES:
+        print(f"\n{C.RED}{C.BOLD}[!] WARNING: MASSIVE DIRECTORY DETECTED{C.RESET}")
+        print(f"{C.ORANGE}The target path ({target_abs}) contains over {MAX_FILES} files.{C.RESET}")
+        print(f"{C.ORANGE}Cloning folders like ~/Downloads or ~/Desktop could cause significant system slowdown.{C.RESET}")
+        choice = input(f"{C.BOLD}Are you absolutely sure you want to devbox this entire path? (y/N): {C.RESET}")
+        if choice.lower() != 'y':
+            print(f"{C.MAGENTA}Aborted by user.{C.RESET}")
+            sys.exit(1)
+        
     project_name = os.path.basename(target_abs)
     workspace_dir = os.path.expanduser(f"~/Sandboxed_Workspaces/{project_name}")
     
