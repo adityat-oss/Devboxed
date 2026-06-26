@@ -24,11 +24,16 @@ def set_limits(memory_mb):
 def run_in_vm(machine_name: str, target_dir: str, mode: str, cmd_list: list, memory_mb: int, net_enabled: bool):
     user_config = config.load_config()
     toolchain_roots = set()
+    devbox_writes = set()
+    
     if mode == "dev":
         for tc in user_config.get("trusted_toolchains", []):
             toolchain_roots.add(os.path.expanduser(tc))
+        for aw in user_config.get("devbox_allowed_writes", []):
+            devbox_writes.add(os.path.expanduser(aw))
                     
     toolchain_allows = "".join([f'\n    (subpath "{root}")' for root in toolchain_roots])
+    devbox_write_allows = "".join([f'\n(allow file-write* (subpath "{root}"))' for root in devbox_writes])
 
     if mode == "dev":
         profile = f"""(version 1)
@@ -51,6 +56,8 @@ def run_in_vm(machine_name: str, target_dir: str, mode: str, cmd_list: list, mem
 (allow file-write* (subpath "/private/tmp"))
 (allow file-write* (subpath "/private/var/folders"))
 (allow file-write* (subpath "/dev"))
+
+;; Explicitly allowed global host writes from ~/.sandboxed_config.json{devbox_write_allows}
 """
     else:
         exec_allows = f"""
@@ -156,6 +163,15 @@ def run_in_vm(machine_name: str, target_dir: str, mode: str, cmd_list: list, mem
     if net_enabled:
         env["http_proxy"] = "http://127.0.0.1:8080"
         env["https_proxy"] = "http://127.0.0.1:8080"
+        
+    # Inject Spoofed Environment Variables for Cache Redirection
+    if mode == "dev":
+        for env_key, env_val in user_config.get("devbox_env_vars", {}).items():
+            if env_val.startswith("./"):
+                # Expand local paths relative to the Virtual Jail target directory
+                env[env_key] = os.path.join(target_dir, env_val[2:])
+            else:
+                env[env_key] = env_val
         
     cmd = ["sandbox-exec", "-f", profile_path]
     if cmd_list:

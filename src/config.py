@@ -5,14 +5,28 @@ CONFIG_PATH = os.path.expanduser("~/.sandboxed_config.json")
 
 DEFAULT_CONFIG = {
     "dlp_patterns": [".env", ".pem", "id_rsa", "node_modules", "build"],
-    "trusted_domains": [],
+    "trusted_domains": [
+        "registry.npmjs.org",
+        "github.com"
+    ],
     "custom_mounts": [],
     "trusted_toolchains": [
         "~/.nvm",
         "~/.cargo",
         "~/.pyenv",
         "/Library/Frameworks/Python.framework"
-    ]
+    ],
+    "devbox_allowed_writes": [
+        #"~/.npm",
+        #"~/.cache/huggingface"
+    ],
+    "devbox_env_vars": {
+        "HF_HOME": "./.devbox_caches/huggingface",
+        "PIP_CACHE_DIR": "./.devbox_caches/pip",
+        "NPM_CONFIG_CACHE": "./.devbox_caches/npm",
+        "XDG_CACHE_HOME": "./.devbox_caches/xdg",
+        "CARGO_HOME": "./.devbox_caches/cargo"
+    }
 }
 
 def load_config():

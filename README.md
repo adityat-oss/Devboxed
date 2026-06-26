@@ -50,6 +50,28 @@ Sandboxed offers two distinct entry points tailored to your exact workflow.
 - **Visible Workspaces:** The jail is visibly mounted to `~/Sandboxed_Workspaces/MyProject` for seamless integration.
 - **Interactive Shell:** Drops you into a sandboxed `/bin/zsh` terminal.
 
+### 3. Global Caches & Virtual Environments
+A critical part of the Devbox "Undo Switch" is how it handles dependencies and downloads:
+- **Inside the Project (`venv`, `node_modules`):** If you create a virtual environment inside the project folder and download gigabytes of packages, it succeeds. When you exit Devbox, you can easily discard the `venv` folder using the Sync GUI, and it gets permanently vaporized.
+- **Outside the Project (`~/.cache/huggingface`, global `npm`):** If a script attempts to download a massive HuggingFace LLM to your global `~/.cache` directory, the macOS kernel will **instantly block the download** with an `Operation not permitted` error. Devbox forbids bloated caches from accumulating on your host machine.
+
+### 4. Cache Spoofing (Automatic Redirection)
+To allow global caching tools to work seamlessly while still being vaporized on exit, Devbox automatically "spoofs" caching environment variables.
+
+In your `~/.sandboxed_config.json`, you will see a `devbox_env_vars` dictionary. By default, it aggressively redirects common cache directories into a `.devbox_caches` folder *inside* your virtual jail:
+```json
+    "devbox_env_vars": {
+        "HF_HOME": "./.devbox_caches/huggingface",
+        "PIP_CACHE_DIR": "./.devbox_caches/pip",
+        "NPM_CONFIG_CACHE": "./.devbox_caches/npm",
+        "XDG_CACHE_HOME": "./.devbox_caches/xdg",
+        "CARGO_HOME": "./.devbox_caches/cargo"
+    }
+```
+*How it works:* Any path starting with `./` is automatically converted into an absolute path inside the Virtual Jail. When a tool like `npm` tries to cache a file globally, the spoofed variable forces it to download into the isolated `.devbox_caches` folder instead. When you exit Devbox, those bloated caches are effortlessly deleted along with the rest of the jail!
+
+*(**Finding Your Dependencies:** If an application crashes inside Devbox with an `Operation not permitted` error, check its documentation to see where it caches files globally. Then, simply add its specific Environment Variable (e.g., `GOCACHE`) to your `devbox_env_vars` config and map it to `./.devbox_caches/go` to instantly fix it!)*
+
 ## Usage
 
 ### 1. Start the Proxy Server (Optional but Recommended)
