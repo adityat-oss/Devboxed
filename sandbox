@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import plistlib
+import tempfile
+import shutil
+import time
+
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(SCRIPT_DIR, "src"))
+try:
+    from jail import VirtualJail
+except ImportError:
+    print("Error: Could not find src/jail.py")
+    sys.exit(1)
+
+class C:
+    MAGENTA = '\033[95m'
+    PURPLE = '\033[35m'
+    ORANGE = '\033[38;5;208m'
+    RED = '\033[91m'
+    NEON_PINK = '\033[38;5;198m'
+    BOLD = '\033[1m'
+    RESET = '\033[0m'
+
+def find_app_binary(app_path):
+    plist_path = os.path.join(app_path, "Contents", "Info.plist")
+    if os.path.exists(plist_path):
+        try:
+            with open(plist_path, 'rb') as f:
+                plist = plistlib.load(f)
+                exec_name = plist.get('CFBundleExecutable')
+                if exec_name:
+                    return os.path.join(app_path, "Contents", "MacOS", exec_name)
+        except Exception:
+            pass
+    macos_dir = os.path.join(app_path, "Contents", "MacOS")
+    if os.path.exists(macos_dir):
+        files = os.listdir(macos_dir)
+        if files:
+            return os.path.join(macos_dir, files[0])
+    return None
+
+def is_browser(app_path):
+    lower = app_path.lower()
+    return "chrome.app" in lower or "brave.app" in lower or "edge.app" in lower
+
+def clear_screen():
+    print('\033c', end='')
+
+def main():
+    if len(sys.argv) < 2:
+        print(f"{C.RED}{C.BOLD}Usage: ./sandbox <file_or_app>{C.RESET}")
+        sys.exit(1)
+
+    target_abs = os.path.abspath(sys.argv[1])
+    if not os.path.exists(target_abs):
+        print(f"{C.RED}{C.BOLD}Error: {target_abs} does not exist.{C.RESET}")
+        sys.exit(1)
+
+    jail = VirtualJail()
+    mem_limit = 512
+    net_enabled = True
+    
+    # Pre-configure based on type
+    mode = "strict"
+    cmd_args = []
+    
+    if target_abs.endswith(".app") and os.path.isdir(target_abs):
+        mode = "app"
+        binary = find_app_binary(target_abs)
+        if not binary:
+            print(f"Error: Could not find executable in {target_abs}")
+            sys.exit(1)
+            
+        if is_browser(target_abs):
+            user_data = tempfile.mkdtemp(prefix="sandboxed_browser_")
+            dl_dir = os.path.expanduser("~/Downloads/Sandboxed_Downloads")
+            os.makedirs(dl_dir, exist_ok=True)
+            jail.mount(dl_dir) # Explicitly mount download dir so they can get files out
+            spoof_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            proxy_flag = "--proxy-server=http://127.0.0.1:8080"
+            cmd_args = [binary, f"--user-data-dir={user_data}", f"--user-agent={spoof_ua}", proxy_flag, "--no-first-run", "--incognito"]
+        else:
+            cmd_args = [binary]
+            
+    elif target_abs.endswith((".mp4", ".mov", ".mkv", ".avi", ".jpg", ".png", ".pdf")):
+        mode = "media"
+        net_enabled = False # Hardcode off for media
+        if target_abs.endswith((".pdf", ".jpg", ".png")):
+            app = "/System/Applications/Preview.app"
+        else:
+            app = "/System/Applications/QuickTime Player.app"
+        binary = find_app_binary(app)
+        jail_file = jail.mount(target_abs)
+        cmd_args = [binary, jail_file]
+        
+    else:
+        mode = "strict"
+        target_dir = os.path.dirname(target_abs)
+        
+        forbidden_parents = [
+            os.path.expanduser("~"),
+            os.path.expanduser("~/Downloads"),
+            os.path.expanduser("~/Desktop"),
+            os.path.expanduser("~/Documents"),
+            os.path.expanduser("~/Library"),
+            "/tmp", "/private/tmp", "/var", "/private/var"
+        ]
+        
+        is_safe_parent = True
+        for fp in forbidden_parents:
+            if os.path.exists(fp) and os.path.exists(target_dir):
+                if os.path.samefile(target_dir, fp):
+                    is_safe_parent = False
+                    break
+            elif target_dir == fp:
+                is_safe_parent = False
+                break
+                
+        if is_safe_parent and os.path.isfile(target_abs):
+            print(f"[*] Safe project directory detected. Auto-mounting sibling dependencies from {target_dir}...")
+            jail_dir = jail.mount(target_dir)
+            jail_file = os.path.join(jail_dir, os.path.basename(target_abs))
+        else:
+            jail_file = jail.mount(target_abs)
+            
+        if target_abs.endswith(".py"):
+            cmd_args = ["python3", jail_file]
+        elif target_abs.endswith(".sh"):
+            cmd_args = ["bash", jail_file]
+        else:
+            cmd_args = [jail_file]
+
+    # Interactive Dashboard Loop
+    while True:
+        clear_screen()
+        print(f"{C.MAGENTA}{C.BOLD}=== 🌆 CYBER-SANDBOX CONSOLE ==={C.RESET}")
+        print(f"{C.BOLD}Target:{C.RESET} {C.ORANGE}{os.path.basename(target_abs)}{C.RESET}")
+        print(f"{C.BOLD}Mode:{C.RESET}   {mode.upper()}")
+        print(f"{C.BOLD}Jail:{C.RESET}   {C.PURPLE}{jail.jail_dir}{C.RESET}")
+        
+        print(f"\n{C.NEON_PINK}[ Current Configuration ]{C.RESET}")
+        print(f"{C.BOLD}1. Memory Limit:{C.RESET} {mem_limit} MB")
+        
+        net_status = f"{C.ORANGE}PROXY INTERCEPT (127.0.0.1:8080){C.RESET}" if net_enabled else f"{C.RED}DENIED{C.RESET}"
+        print(f"{C.BOLD}2. Network Access:{C.RESET} {net_status}")
+        
+        print(f"{C.BOLD}3. Allowed Files (Jail Mounts):{C.RESET}")
+        if not jail.mounts:
+            print("   - (None)")
+        else:
+            for orig, jp in jail.mounts.items():
+                print(f"   - {orig}")
+                
+        print(f"\n{C.NEON_PINK}[ Actions ]{C.RESET}")
+        print(f"{C.ORANGE}[A]{C.RESET} Add File/Directory Access")
+        print(f"{C.ORANGE}[M]{C.RESET} Modify Memory Limit")
+        print(f"{C.ORANGE}[N]{C.RESET} Toggle Network")
+        print(f"{C.ORANGE}[R]{C.RESET} {C.BOLD}RUN SANDBOX{C.RESET}")
+        print(f"{C.RED}[Q]{C.RESET} Quit")
+        
+        choice = input(f"\n{C.BOLD}Select an action:{C.RESET} ").upper().strip()
+        
+        if choice == 'A':
+            p = input("Enter absolute path to file/folder: ").strip()
+            try:
+                jail.mount(p)
+            except Exception as e:
+                input(f"Error: {e}. Press Enter to continue.")
+        elif choice == 'M':
+            m = input("Enter memory limit in MB: ").strip()
+            if m.isdigit(): mem_limit = int(m)
+        elif choice == 'N':
+            net_enabled = not net_enabled
+        elif choice == 'Q':
+            jail.destroy()
+            sys.exit(0)
+        elif choice == 'R':
+            break
+
+    # Execute
+    clear_screen()
+    print(f"{C.MAGENTA}{C.BOLD}=== 🔒 EXECUTING IN CYBER-SANDBOX ==={C.RESET}")
+    orchestrator = os.path.join(SCRIPT_DIR, "src", "vm_orchestrator.py")
+    
+    run_args = [
+        "python3", orchestrator, "run", 
+        "--name", "universal-sandbox",
+        "--dir", jail.jail_dir,
+        "--mode", mode,
+        "--mem", str(mem_limit),
+        "--net", str(net_enabled),
+        "--cmd"
+    ]
+    run_args.extend(cmd_args)
+    
+    try:
+        subprocess.run(run_args)
+    finally:
+        print(f"\n{C.ORANGE}[*] Execution finished. Syncing modifications...{C.RESET}")
+        jail.devbox_sync(target_abs)
+        jail.destroy()
+        
+        # Cleanup browser profile if it exists
+        if 'user_data' in locals() and os.path.exists(user_data):
+            shutil.rmtree(user_data, ignore_errors=True)
+            
+        print(f"{C.NEON_PINK}[*] Sandbox destroyed securely. 🌆{C.RESET}")
+
+if __name__ == "__main__":
+    main()

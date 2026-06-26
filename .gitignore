@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Databases & Logs
+audit.db
+*.log
+
+# Devbox
+.DS_Store
+
+# User configs
+.sandboxed_config.json

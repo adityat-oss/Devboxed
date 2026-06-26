@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import shutil
+
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(SCRIPT_DIR, "src"))
+try:
+    from jail import VirtualJail
+except ImportError:
+    print("Error: Could not find src/jail.py")
+    sys.exit(1)
+
+class C:
+    MAGENTA = '\033[95m'
+    PURPLE = '\033[35m'
+    ORANGE = '\033[38;5;208m'
+    RED = '\033[91m'
+    NEON_PINK = '\033[38;5;198m'
+    BOLD = '\033[1m'
+    RESET = '\033[0m'
+
+def clear_screen():
+    print('\033c', end='')
+
+def main():
+    if len(sys.argv) < 2:
+        target_abs = os.path.abspath(os.getcwd())
+    else:
+        target_abs = os.path.abspath(sys.argv[1])
+        
+    if not os.path.exists(target_abs) or not os.path.isdir(target_abs):
+        print(f"{C.RED}{C.BOLD}Error: {target_abs} is not a valid directory.{C.RESET}")
+        sys.exit(1)
+
+    project_name = os.path.basename(target_abs)
+    workspace_dir = os.path.expanduser(f"~/Sandboxed_Workspaces/{project_name}")
+    
+    # If the workspace already exists, it might be a stale run
+    if os.path.exists(workspace_dir):
+        shutil.rmtree(workspace_dir, ignore_errors=True)
+
+    jail = VirtualJail(workspace_dir=workspace_dir)
+    print(f"{C.MAGENTA}[*] Initializing Cyber-Jail for {C.BOLD}{project_name}{C.RESET}{C.MAGENTA} at {C.ORANGE}{workspace_dir}{C.RESET}...")
+    
+    jail.mount(target_abs)
+    
+    clear_screen()
+    print(f"{C.MAGENTA}{C.BOLD}========================================={C.RESET}")
+    print(f"{C.NEON_PINK}{C.BOLD}      🌆  DEVBOX: SECURE WORKSPACE       {C.RESET}")
+    print(f"{C.MAGENTA}{C.BOLD}========================================={C.RESET}")
+    print(f"{C.BOLD}Project:{C.RESET} {C.ORANGE}{project_name}{C.RESET}")
+    print(f"{C.BOLD}Host:   {C.RESET} {target_abs}")
+    print(f"{C.BOLD}Jail:   {C.RESET} {C.PURPLE}{workspace_dir}{C.RESET}")
+    print(f"{C.MAGENTA}-----------------------------------------{C.RESET}")
+    print(f"{C.BOLD}🔒 You are now strictly confined in the virtual construct.{C.RESET}")
+    print(f"Type {C.ORANGE}'exit'{C.RESET} or press {C.ORANGE}Ctrl-D{C.RESET} to leave and trigger garbage collection.")
+    print(f"{C.MAGENTA}{C.BOLD}========================================={C.RESET}")
+    
+    # Auto-open the IDE to the jail folder
+    bundle_id = os.environ.get("__CFBundleIdentifier")
+    if bundle_id:
+        print(f"{C.MAGENTA}[*] Re-routing IDE into Virtual Jail...{C.RESET}")
+        subprocess.run(["open", "-n", "-b", bundle_id, "--args", workspace_dir], stderr=subprocess.DEVNULL)
+    
+    orchestrator = os.path.join(SCRIPT_DIR, "src", "vm_orchestrator.py")
+    
+    # Spawn an interactive zsh shell inside the jail using the 'dev' profile
+    run_args = [
+        "python3", orchestrator, "run",
+        "--name", f"devbox-{project_name}",
+        "--dir", workspace_dir,
+        "--mode", "dev",
+        "--cmd", "/bin/zsh"
+    ]
+    
+    try:
+        subprocess.run(run_args)
+    finally:
+        print(f"\n{C.ORANGE}[*] Exiting Devbox. Launching Garbage Collector & Sync GUI...{C.RESET}")
+        jail.devbox_sync(target_abs)
+        jail.destroy()
+        print(f"{C.NEON_PINK}[*] Devbox workspace destroyed. Host folder remains pristine. 🌆{C.RESET}")
+
+if __name__ == "__main__":
+    main()
