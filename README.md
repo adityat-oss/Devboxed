@@ -11,6 +11,7 @@ It allows you to safely execute untrusted scripts, run malware analysis, or crea
 - **Dynamic Toolchain Discovery:** Automatically injects your custom developer environments (`~/.nvm`, `~/.cargo`, `~/.pyenv`) into the sandbox so your compilers work flawlessly.
 - **DLP Garbage Collector:** Automatically prevents `.env` secrets, massive `node_modules`, and build artifacts from leaking back to your host filesystem when a session ends.
 - **Cyberpunk UI & IDE Auto-Routing:** Instantly launches your host IDE (VSCode/Cursor) directly into the virtual jail. When you exit, a breathtaking Dark Mode native GUI diff viewer prompts you to safely sync your code changes.
+- **APFS Virtual Jails:** Creates instantaneous, zero-storage clones of your target files. Untrusted scripts run against the clone, guaranteeing your original files are never harmed.
 
 ## Setup Guide (Quick Start)
 
@@ -31,6 +32,13 @@ cd Sandboxed
 - You will see a success message indicating that `devbox` and `sandbox` have been linked to `/usr/local/bin`.
 - A default configuration file will be generated at `~/.sandboxed_config.json`.
 - **Note:** If you want the Network Interceptor to work, you must keep the proxy server running in a background terminal by executing: `python3 src/proxy_server.py`.
+
+## Application Compatibility Boundaries
+
+Because Sandboxed uses **Binary Ripping** (extracting the raw UNIX executable from inside an `.app/Contents/MacOS/` folder) to guarantee the kernel natively sandboxes the entire process tree, there is a hard compatibility boundary for GUI applications:
+
+-  **Supported:** Self-contained binaries, CLI tools, and Chromium/WebKit wrappers (like Google Chrome, Brave, and basic Electron apps). These will successfully run under strict kernel isolation.
+-  **Unsupported:** Complex macOS-integrated applications (like Adobe Photoshop, Microsoft Word, Logic Pro, or Xcode). These applications rely heavily on macOS `launchd` XPC daemons, App Store entitlements, and deep WindowServer communication tied to the outer `.app` bundle. Stripping the bundle context to enforce kernel security will cause these apps to crash instantly on launch. Do not attempt to sandbox heavy GUI applications.
 
 ## Architecture: Dual-Mode Execution
 
@@ -128,6 +136,9 @@ On your first run, a default configuration file is generated at `~/.sandboxed_co
 - **`trusted_domains`**: Domains that bypass the interactive proxy prompt and are silently allowed.
 - **`custom_mounts`**: Absolute paths to extra host folders you want mounted into the sandbox by default.
 - **`trusted_toolchains`**: Absolute paths to your developer toolchains. Since `sandbox` strictly isolates the environment, compilers will be blocked unless listed here.
+
+## Audit Logs
+All proxy interactions, including domains you explicitly "Allow" or "Deny" via the AppleScript UI, are permanently recorded in a local SQLite database at `audit.db` in the project root. You can query this database to review historical sandbox network activity.
 
 ## Testing the Sandbox
 
